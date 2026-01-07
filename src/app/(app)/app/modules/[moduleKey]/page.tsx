@@ -2,13 +2,14 @@ import { useTranslations } from 'next-intl'
 import { getModule } from '@/features/modules/registry'
 import { notFound } from 'next/navigation'
 
-export default function ModulePage({
+export default async function ModulePage({
   params,
 }: {
-  params: { moduleKey: string }
+  params: Promise<{ moduleKey: string }>
 }) {
+  const { moduleKey } = await params
   const t = useTranslations()
-  const module = getModule(params.moduleKey)
+  const module = getModule(moduleKey)
 
   if (!module) {
     notFound()

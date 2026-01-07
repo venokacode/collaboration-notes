@@ -3,15 +3,16 @@ import { useTranslations } from 'next-intl'
 import { getModule } from '@/features/modules/registry'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
-export default function ModuleLayout({
+export default async function ModuleLayout({
   params,
   children,
 }: {
-  params: { moduleKey: string }
+  params: Promise<{ moduleKey: string }>
   children: React.ReactNode
 }) {
+  const { moduleKey } = await params
   const t = useTranslations()
-  const module = getModule(params.moduleKey)
+  const module = getModule(moduleKey)
 
   // Module doesn't exist
   if (!module) {
