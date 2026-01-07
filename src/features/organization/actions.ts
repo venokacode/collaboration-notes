@@ -99,6 +99,134 @@ export async function createOrganization(formData: FormData): Promise<OrgResult>
   }
 }
 
+export async function updateOrganization(formData: FormData) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { success: false, error: 'Not authenticated' }
+
+    const orgId = formData.get('org_id') as string
+    const name = formData.get('name') as string
+
+    if (!name || name.length < 2) {
+      return { success: false, error: 'Name must be at least 2 characters' }
+    }
+
+    const { error } = await supabase
+      .from('organizations')
+      .update({ name })
+      .eq('id', orgId)
+
+    if (error) {
+      console.error('Failed to update organization:', error)
+      return { success: false, error: 'Failed to update organization' }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Unexpected error:', error)
+    return { success: false, error: 'An unexpected error occurred' }
+  }
+}
+
+export async function inviteMember(formData: FormData) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { success: false, error: 'Not authenticated' }
+
+    const orgId = formData.get('org_id') as string
+    const email = formData.get('email') as string
+    const role = formData.get('role') as 'admin' | 'recruiter' | 'viewer'
+
+    // Find user by email
+    const { data: targetUser } = await supabase
+      .from('user_settings')
+      .select('user_id')
+      .eq('email', email)
+      .single()
+
+    if (!targetUser) {
+      return { success: false, error: 'User not found' }
+    }
+
+    // Check if already member
+    const { data: existing } = await supabase
+      .from('org_members')
+      .select('id')
+      .eq('organization_id', orgId)
+      .eq('user_id', targetUser.user_id)
+      .single()
+
+    if (existing) {
+      return { success: false, error: 'User is already a member' }
+    }
+
+    // Add member
+    const { error } = await supabase
+      .from('org_members')
+      .insert({
+        organization_id: orgId,
+        user_id: targetUser.user_id,
+        role,
+      })
+
+    if (error) {
+      console.error('Failed to add member:', error)
+      return { success: false, error: 'Failed to add member' }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Unexpected error:', error)
+    return { success: false, error: 'An unexpected error occurred' }
+  }
+}
+
+export async function updateMemberRole(formData: FormData) {
+  try {
+    const supabase = await createClient()
+    const memberId = formData.get('member_id') as string
+    const role = formData.get('role') as 'admin' | 'recruiter' | 'viewer'
+
+    const { error } = await supabase
+      .from('org_members')
+      .update({ role })
+      .eq('id', memberId)
+
+    if (error) {
+      console.error('Failed to update role:', error)
+      return { success: false, error: 'Failed to update role' }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Unexpected error:', error)
+    return { success: false, error: 'An unexpected error occurred' }
+  }
+}
+
+export async function removeMember(memberId: string) {
+  try {
+    const supabase = await createClient()
+
+    const { error } = await supabase
+      .from('org_members')
+      .delete()
+      .eq('id', memberId)
+
+    if (error) {
+      console.error('Failed to remove member:', error)
+      return { success: false, error: 'Failed to remove member' }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Unexpected error:', error)
+    return { success: false, error: 'An unexpected error occurred' }
+  }
+}
+
 export async function switchOrganization(orgId: string) {
   try {
     const supabase = await createClient()

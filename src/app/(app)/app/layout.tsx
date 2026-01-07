@@ -42,6 +42,12 @@ export default async function AppShellLayout({
                 <span className="text-sm text-gray-700">
                   {user?.user_metadata?.name || user?.email}
                 </span>
+                <Link
+                  href="/app/settings/profile"
+                  className="text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Settings
+                </Link>
                 <form action={signOut}>
                   <button
                     type="submit"
