@@ -1,0 +1,73 @@
+{
+  "common": {
+    "getStarted": "Get Started",
+    "comingSoon": "Coming Soon",
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "back": "Back",
+    "next": "Next",
+    "submit": "Submit",
+    "search": "Search"
+  },
+  "modules": {
+    "writing": {
+      "title": "English Writing Test",
+      "description": "Assess candidates' English writing skills with customizable prompts and automated evaluation"
+    },
+    "video_intro": {
+      "title": "Video Introduction",
+      "description": "Record and review candidate video introductions to assess communication skills"
+    },
+    "signature": {
+      "title": "E-Signature",
+      "description": "Collect digital signatures from candidates for contracts and agreements"
+    },
+    "comingSoonTooltip": "This module is coming soon and not available yet.",
+    "comingSoonMessage": "This feature is under development and will be available soon. Stay tuned!"
+  },
+  "landing": {
+    "hero": {
+      "title": "Modern HR Assessment Platform",
+      "subtitle": "Streamline your hiring process with AI-powered assessments",
+      "cta": "Start Free Trial"
+    },
+    "features": {
+      "title": "Our Modules",
+      "subtitle": "Choose the right assessment tools for your needs"
+    }
+  },
+  "auth": {
+    "signIn": "Sign In",
+    "signUp": "Sign Up",
+    "signOut": "Sign Out",
+    "email": "Email",
+    "password": "Password",
+    "forgotPassword": "Forgot password?",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Welcome back!",
+    "modules": "Available Modules",
+    "recentActivity": "Recent Activity"
+  },
+  "organization": {
+    "name": "Organization Name",
+    "create": "Create Organization",
+    "switch": "Switch Organization",
+    "settings": "Organization Settings",
+    "members": "Members",
+    "inviteMember": "Invite Member"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "profile": "Profile",
+    "preferences": "Preferences"
+  }
+}
