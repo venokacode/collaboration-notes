@@ -2,6 +2,8 @@ import { OrgSwitcher } from '@/components/layout/OrgSwitcher'
 import { LocaleSwitcher } from '@/components/layout/LocaleSwitcher'
 import { getUserOrganizations, getActiveOrgId } from '@/lib/organization'
 import { getLocale } from '@/lib/i18n/getLocale'
+import { createClient } from '@/lib/supabase/server'
+import { signOut } from '@/features/auth/actions'
 import Link from 'next/link'
 
 export default async function AppShellLayout({
@@ -9,6 +11,11 @@ export default async function AppShellLayout({
 }: {
   children: React.ReactNode
 }) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   const organizations = await getUserOrganizations()
   const activeOrgId = await getActiveOrgId()
   const currentLocale = await getLocale()
@@ -31,6 +38,19 @@ export default async function AppShellLayout({
                 />
               )}
               <LocaleSwitcher currentLocale={currentLocale} />
+              <div className="flex items-center gap-3 border-l border-gray-200 pl-4">
+                <span className="text-sm text-gray-700">
+                  {user?.user_metadata?.name || user?.email}
+                </span>
+                <form action={signOut}>
+                  <button
+                    type="submit"
+                    className="text-sm text-gray-600 hover:text-gray-900"
+                  >
+                    Sign out
+                  </button>
+                </form>
+              </div>
             </div>
           </div>
         </div>
