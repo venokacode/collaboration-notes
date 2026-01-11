@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { isValidUUID, checkRateLimit } from '@/lib/security'
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Create a response object
@@ -63,18 +63,19 @@ export async function proxy(request: NextRequest) {
     const activeWorkspaceId = request.cookies.get('active_workspace_id')?.value
 
     if (!activeWorkspaceId) {
-      // Get default workspace and set cookie
-      const { data: defaultWorkspace } = await supabase
-        .from('workspaces')
-        .select('id')
-        .eq('is_default', true)
+      // Get default workspace through workspace_members to respect RLS
+      const { data: membership } = await supabase
+        .from('workspace_members')
+        .select('workspace_id, workspaces!inner(id, is_default)')
+        .eq('user_id', user.id)
+        .eq('workspaces.is_default', true)
         .single()
 
-      if (defaultWorkspace) {
+      if (membership?.workspace_id) {
         response = NextResponse.next({
           request,
         })
-        response.cookies.set('active_workspace_id', defaultWorkspace.id, {
+        response.cookies.set('active_workspace_id', membership.workspace_id, {
           path: '/',
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
@@ -82,8 +83,10 @@ export async function proxy(request: NextRequest) {
         })
         return response
       } else {
-        // No default workspace found, redirect to main app page
-        return NextResponse.redirect(new URL('/app', request.url))
+        // No default workspace membership found - this shouldn't happen
+        // Log error and redirect to login to prevent infinite loop
+        console.error('User has no default workspace membership:', user.id)
+        return NextResponse.redirect(new URL('/login?error=no_workspace', request.url))
       }
     }
 
