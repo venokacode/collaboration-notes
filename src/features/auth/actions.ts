@@ -148,6 +148,26 @@ export async function signIn(formData: FormData): Promise<AuthResult> {
             locale: 'en',
           })
       }
+
+      // Set active_workspace_id cookie to user's default workspace
+      const { data: membership } = await supabase
+        .from('workspace_members')
+        .select('workspace_id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .single()
+
+      if (membership?.workspace_id) {
+        const { cookies } = await import('next/headers')
+        const cookieStore = await cookies()
+        cookieStore.set('active_workspace_id', membership.workspace_id, {
+          path: '/',
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 60 * 60 * 24 * 365, // 1 year
+        })
+      }
     }
 
     return { success: true }
