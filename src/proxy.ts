@@ -59,57 +59,72 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(redirectUrl)
     }
 
-    // Skip org check for onboarding routes
-    if (!pathname.startsWith('/app/onboarding')) {
-      // Check organization context
-      const activeOrgId = request.cookies.get('active_org_id')?.value
+    // For collaboration-notes, check workspace membership
+    const activeWorkspaceId = request.cookies.get('active_workspace_id')?.value
 
-      if (!activeOrgId) {
-        return NextResponse.redirect(new URL('/app/onboarding/org', request.url))
-      }
-
-      // Validate UUID format to prevent enumeration attacks
-      if (!isValidUUID(activeOrgId)) {
-        console.warn(`Invalid org ID format: ${activeOrgId}`)
-        response = NextResponse.redirect(new URL('/app/onboarding/org', request.url))
-        response.cookies.delete('active_org_id')
-        return response
-      }
-
-      // Rate limiting for org verification (per user)
-      const rateLimitKey = `org-verify:${user.id}`
-      const rateLimit = checkRateLimit(rateLimitKey, 20, 60000) // 20 requests per minute
-
-      if (!rateLimit.allowed) {
-        console.warn(`Rate limit exceeded for user ${user.id}`)
-        return NextResponse.json(
-          { error: 'Too many requests. Please try again later.' },
-          { status: 429 }
-        )
-      }
-
-      // Verify user is a member of the active organization
-      // Note: This query is protected by RLS, so it will only return results
-      // if the user is actually a member
-      const { data: membership, error } = await supabase
-        .from('org_members')
+    if (!activeWorkspaceId) {
+      // Get default workspace and set cookie
+      const { data: defaultWorkspace } = await supabase
+        .from('workspaces')
         .select('id')
-        .eq('organization_id', activeOrgId)
-        .eq('user_id', user.id)
+        .eq('is_default', true)
         .single()
 
-      if (error || !membership) {
-        // Log suspicious activity (potential enumeration attempt)
-        if (error && error.code !== 'PGRST116') {
-          // PGRST116 is "no rows returned"
-          console.error('Org membership verification error:', error)
-        }
-
-        // Clear invalid org cookie and redirect to onboarding
-        response = NextResponse.redirect(new URL('/app/onboarding/org', request.url))
-        response.cookies.delete('active_org_id')
+      if (defaultWorkspace) {
+        response = NextResponse.next({
+          request,
+        })
+        response.cookies.set('active_workspace_id', defaultWorkspace.id, {
+          path: '/',
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+        })
         return response
+      } else {
+        // No default workspace found, redirect to main app page
+        return NextResponse.redirect(new URL('/app', request.url))
       }
+    }
+
+    // Validate UUID format to prevent enumeration attacks
+    if (!isValidUUID(activeWorkspaceId)) {
+      console.warn(`Invalid workspace ID format: ${activeWorkspaceId}`)
+      response = NextResponse.next({ request })
+      response.cookies.delete('active_workspace_id')
+      return response
+    }
+
+    // Rate limiting for workspace verification (per user)
+    const rateLimitKey = `workspace-verify:${user.id}`
+    const rateLimit = checkRateLimit(rateLimitKey, 20, 60000) // 20 requests per minute
+
+    if (!rateLimit.allowed) {
+      console.warn(`Rate limit exceeded for user ${user.id}`)
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        { status: 429 }
+      )
+    }
+
+    // Verify user is a member of the active workspace
+    const { data: membership, error } = await supabase
+      .from('workspace_members')
+      .select('id')
+      .eq('workspace_id', activeWorkspaceId)
+      .eq('user_id', user.id)
+      .single()
+
+    if (error || !membership) {
+      // Log suspicious activity
+      if (error && error.code !== 'PGRST116') {
+        console.error('Workspace membership verification error:', error)
+      }
+
+      // Clear invalid workspace cookie
+      response = NextResponse.next({ request })
+      response.cookies.delete('active_workspace_id')
+      return response
     }
   }
 
