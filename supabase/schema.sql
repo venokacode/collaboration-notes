@@ -1,443 +1,282 @@
--- ============================================================================
--- HR SaaS Database Schema
--- ============================================================================
--- This schema supports a multi-tenant HR SaaS with modular architecture
--- Modules: writing (active), video_intro (coming soon), signature (coming soon)
--- ============================================================================
+-- =====================================================
+-- Collaboration Notes System - Database Schema
+-- =====================================================
+-- This schema supports internal collaboration with future multi-tenant expansion
+-- All tables include workspace_id for data isolation
 
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- ============================================================================
--- 1. ORGANIZATIONS TABLE
--- ============================================================================
-CREATE TABLE IF NOT EXISTS organizations (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
+-- =====================================================
+-- 1. Workspaces Table
+-- =====================================================
+CREATE TABLE IF NOT EXISTS workspaces (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  is_default BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;
+-- Create default workspace
+INSERT INTO workspaces (name, slug, is_default)
+VALUES ('Internal', 'internal', true)
+ON CONFLICT (slug) DO NOTHING;
 
--- ============================================================================
--- 2. ORG MEMBERS TABLE
--- ============================================================================
-CREATE TABLE IF NOT EXISTS org_members (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE NOT NULL,
-  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  role text NOT NULL CHECK (role IN ('owner', 'admin', 'recruiter', 'viewer')),
-  created_at timestamptz DEFAULT now(),
-  UNIQUE(organization_id, user_id)
+-- =====================================================
+-- 2. Workspace Members Table
+-- =====================================================
+CREATE TABLE IF NOT EXISTS workspace_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'member',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(workspace_id, user_id)
 );
 
-ALTER TABLE org_members ENABLE ROW LEVEL SECURITY;
-
-CREATE INDEX IF NOT EXISTS idx_org_members_org_id ON org_members(organization_id);
-CREATE INDEX IF NOT EXISTS idx_org_members_user_id ON org_members(user_id);
-
--- ============================================================================
--- 3. USER SETTINGS TABLE
--- ============================================================================
-CREATE TABLE IF NOT EXISTS user_settings (
-  user_id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  locale text DEFAULT 'en',
-  updated_at timestamptz DEFAULT now()
+-- =====================================================
+-- 3. Items Table (Unified: Notes, Todos, Cards)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  content TEXT,
+  type_key TEXT NOT NULL DEFAULT 'note',
+  status_key TEXT NOT NULL DEFAULT 'todo',
+  color TEXT,
+  created_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  completed_at TIMESTAMPTZ
 );
 
-ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
+-- Index for performance
+CREATE INDEX IF NOT EXISTS idx_items_workspace_id ON items(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_items_status_key ON items(status_key);
+CREATE INDEX IF NOT EXISTS idx_items_type_key ON items(type_key);
+CREATE INDEX IF NOT EXISTS idx_items_created_by ON items(created_by);
 
--- ============================================================================
--- 4. TESTS TABLE
--- ============================================================================
-CREATE TABLE IF NOT EXISTS tests (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE NOT NULL,
-  module_key text NOT NULL DEFAULT 'writing',
-  title text NOT NULL,
-  description text,
-  prompt text NOT NULL,
-  time_limit_minutes integer,
-  created_by uuid REFERENCES auth.users(id),
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now(),
-  CONSTRAINT valid_module_key CHECK (module_key IN ('writing', 'video_intro', 'signature'))
+-- =====================================================
+-- 4. Tags Table
+-- =====================================================
+CREATE TABLE IF NOT EXISTS tags (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  color TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(workspace_id, name)
 );
 
-ALTER TABLE tests ENABLE ROW LEVEL SECURITY;
+-- Index for performance
+CREATE INDEX IF NOT EXISTS idx_tags_workspace_id ON tags(workspace_id);
 
-CREATE INDEX IF NOT EXISTS idx_tests_org_module ON tests(organization_id, module_key);
-CREATE INDEX IF NOT EXISTS idx_tests_created_by ON tests(created_by);
-
--- ============================================================================
--- 5. TEST LINKS TABLE
--- ============================================================================
-CREATE TABLE IF NOT EXISTS test_links (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  test_id uuid REFERENCES tests(id) ON DELETE CASCADE NOT NULL,
-  token text UNIQUE NOT NULL,
-  expires_at timestamptz,
-  max_attempts integer DEFAULT 1,
-  created_at timestamptz DEFAULT now()
+-- =====================================================
+-- 5. Item-Tag Relations Table (Many-to-Many)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS item_tags (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  item_id UUID NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  tag_id UUID NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(item_id, tag_id)
 );
 
-ALTER TABLE test_links ENABLE ROW LEVEL SECURITY;
+-- Index for performance
+CREATE INDEX IF NOT EXISTS idx_item_tags_item_id ON item_tags(item_id);
+CREATE INDEX IF NOT EXISTS idx_item_tags_tag_id ON item_tags(tag_id);
 
-CREATE INDEX IF NOT EXISTS idx_test_links_test_id ON test_links(test_id);
-CREATE INDEX IF NOT EXISTS idx_test_links_token ON test_links(token);
+-- =====================================================
+-- 6. Row Level Security (RLS) Policies
+-- =====================================================
 
--- ============================================================================
--- 6. CANDIDATES TABLE
--- ============================================================================
-CREATE TABLE IF NOT EXISTS candidates (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE NOT NULL,
-  email text NOT NULL,
-  name text,
-  created_at timestamptz DEFAULT now(),
-  UNIQUE(organization_id, email)
-);
+-- Enable RLS on all tables
+ALTER TABLE workspaces ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workspace_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tags ENABLE ROW LEVEL SECURITY;
+ALTER TABLE item_tags ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE candidates ENABLE ROW LEVEL SECURITY;
-
-CREATE INDEX IF NOT EXISTS idx_candidates_org_id ON candidates(organization_id);
-CREATE INDEX IF NOT EXISTS idx_candidates_email ON candidates(email);
-
--- ============================================================================
--- 7. ATTEMPTS TABLE
--- ============================================================================
-CREATE TABLE IF NOT EXISTS attempts (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  test_link_id uuid REFERENCES test_links(id) ON DELETE CASCADE NOT NULL,
-  candidate_id uuid REFERENCES candidates(id) ON DELETE SET NULL,
-  started_at timestamptz DEFAULT now(),
-  submitted_at timestamptz,
-  content text,
-  metadata jsonb DEFAULT '{}'::jsonb
-);
-
-ALTER TABLE attempts ENABLE ROW LEVEL SECURITY;
-
-CREATE INDEX IF NOT EXISTS idx_attempts_test_link_id ON attempts(test_link_id);
-CREATE INDEX IF NOT EXISTS idx_attempts_candidate_id ON attempts(candidate_id);
-
--- ============================================================================
--- 8. REPORTS TABLE
--- ============================================================================
-CREATE TABLE IF NOT EXISTS reports (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  attempt_id uuid REFERENCES attempts(id) ON DELETE CASCADE NOT NULL,
-  organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE NOT NULL,
-  score jsonb,
-  feedback text,
-  generated_at timestamptz DEFAULT now()
-);
-
-ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
-
-CREATE INDEX IF NOT EXISTS idx_reports_attempt_id ON reports(attempt_id);
-CREATE INDEX IF NOT EXISTS idx_reports_org_id ON reports(organization_id);
-
--- ============================================================================
--- 9. AUDIT LOGS TABLE
--- ============================================================================
-CREATE TABLE IF NOT EXISTS audit_logs (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id uuid REFERENCES organizations(id) ON DELETE CASCADE NOT NULL,
-  user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
-  action text NOT NULL,
-  resource_type text NOT NULL,
-  resource_id uuid,
-  metadata jsonb DEFAULT '{}'::jsonb,
-  created_at timestamptz DEFAULT now()
-);
-
-ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
-
-CREATE INDEX IF NOT EXISTS idx_audit_logs_org_id ON audit_logs(organization_id);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
-
--- ============================================================================
--- RLS HELPER FUNCTIONS
--- ============================================================================
-
--- Check if user is a member of an organization
-CREATE OR REPLACE FUNCTION is_org_member(org_id uuid)
-RETURNS boolean AS $$
-BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM org_members
-    WHERE organization_id = org_id
-    AND user_id = auth.uid()
+-- Workspaces: Users can only see workspaces they are members of
+CREATE POLICY "Users can view their workspaces"
+  ON workspaces FOR SELECT
+  USING (
+    id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE user_id = auth.uid()
+    )
   );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Get user's role in an organization
-CREATE OR REPLACE FUNCTION org_role(org_id uuid)
-RETURNS text AS $$
-BEGIN
-  RETURN (
-    SELECT role FROM org_members
-    WHERE organization_id = org_id
-    AND user_id = auth.uid()
+-- Workspace Members: Users can view members of their workspaces
+CREATE POLICY "Users can view workspace members"
+  ON workspace_members FOR SELECT
+  USING (
+    workspace_id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE user_id = auth.uid()
+    )
   );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Check if user has write permission (owner, admin, or recruiter)
-CREATE OR REPLACE FUNCTION has_write_permission(org_id uuid)
-RETURNS boolean AS $$
+-- Workspace Members: Users can insert themselves into workspaces (for auto-join)
+CREATE POLICY "Users can join workspaces"
+  ON workspace_members FOR INSERT
+  WITH CHECK (user_id = auth.uid());
+
+-- Items: Users can view items in their workspaces
+CREATE POLICY "Users can view workspace items"
+  ON items FOR SELECT
+  USING (
+    workspace_id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE user_id = auth.uid()
+    )
+  );
+
+-- Items: Users can create items in their workspaces
+CREATE POLICY "Users can create workspace items"
+  ON items FOR INSERT
+  WITH CHECK (
+    workspace_id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE user_id = auth.uid()
+    )
+    AND created_by = auth.uid()
+  );
+
+-- Items: Users can update items in their workspaces
+CREATE POLICY "Users can update workspace items"
+  ON items FOR UPDATE
+  USING (
+    workspace_id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE user_id = auth.uid()
+    )
+  );
+
+-- Items: Users can delete items they created
+CREATE POLICY "Users can delete their items"
+  ON items FOR DELETE
+  USING (
+    workspace_id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE user_id = auth.uid()
+    )
+  );
+
+-- Tags: Users can view tags in their workspaces
+CREATE POLICY "Users can view workspace tags"
+  ON tags FOR SELECT
+  USING (
+    workspace_id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE user_id = auth.uid()
+    )
+  );
+
+-- Tags: Users can create tags in their workspaces
+CREATE POLICY "Users can create workspace tags"
+  ON tags FOR INSERT
+  WITH CHECK (
+    workspace_id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE user_id = auth.uid()
+    )
+  );
+
+-- Tags: Users can update tags in their workspaces
+CREATE POLICY "Users can update workspace tags"
+  ON tags FOR UPDATE
+  USING (
+    workspace_id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE user_id = auth.uid()
+    )
+  );
+
+-- Tags: Users can delete tags in their workspaces
+CREATE POLICY "Users can delete workspace tags"
+  ON tags FOR DELETE
+  USING (
+    workspace_id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE user_id = auth.uid()
+    )
+  );
+
+-- Item-Tags: Users can view item-tag relations in their workspaces
+CREATE POLICY "Users can view item tags"
+  ON item_tags FOR SELECT
+  USING (
+    item_id IN (
+      SELECT id FROM items
+      WHERE workspace_id IN (
+        SELECT workspace_id FROM workspace_members
+        WHERE user_id = auth.uid()
+      )
+    )
+  );
+
+-- Item-Tags: Users can create item-tag relations in their workspaces
+CREATE POLICY "Users can create item tags"
+  ON item_tags FOR INSERT
+  WITH CHECK (
+    item_id IN (
+      SELECT id FROM items
+      WHERE workspace_id IN (
+        SELECT workspace_id FROM workspace_members
+        WHERE user_id = auth.uid()
+      )
+    )
+  );
+
+-- Item-Tags: Users can delete item-tag relations in their workspaces
+CREATE POLICY "Users can delete item tags"
+  ON item_tags FOR DELETE
+  USING (
+    item_id IN (
+      SELECT id FROM items
+      WHERE workspace_id IN (
+        SELECT workspace_id FROM workspace_members
+        WHERE user_id = auth.uid()
+      )
+    )
+  );
+
+-- =====================================================
+-- 7. Functions & Triggers
+-- =====================================================
+
+-- Function: Auto-join new users to default workspace
+CREATE OR REPLACE FUNCTION auto_join_default_workspace()
+RETURNS TRIGGER AS $$
+DECLARE
+  default_workspace_id UUID;
 BEGIN
-  RETURN org_role(org_id) IN ('owner', 'admin', 'recruiter');
+  -- Get default workspace ID
+  SELECT id INTO default_workspace_id
+  FROM workspaces
+  WHERE is_default = true
+  LIMIT 1;
+
+  -- Insert user into default workspace
+  IF default_workspace_id IS NOT NULL THEN
+    INSERT INTO workspace_members (workspace_id, user_id, role)
+    VALUES (default_workspace_id, NEW.id, 'member')
+    ON CONFLICT (workspace_id, user_id) DO NOTHING;
+  END IF;
+
+  RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- ============================================================================
--- RLS POLICIES: ORGANIZATIONS
--- ============================================================================
+-- Trigger: Auto-join on user creation
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION auto_join_default_workspace();
 
--- Users can read organizations they are members of
-CREATE POLICY "org_members_read_organizations"
-ON organizations FOR SELECT
-USING (is_org_member(id));
-
--- Only owners can update organizations
-CREATE POLICY "org_owners_update_organizations"
-ON organizations FOR UPDATE
-USING (org_role(id) = 'owner');
-
--- Only owners can delete organizations
-CREATE POLICY "org_owners_delete_organizations"
-ON organizations FOR DELETE
-USING (org_role(id) = 'owner');
-
--- Any authenticated user can create an organization
-CREATE POLICY "authenticated_create_organizations"
-ON organizations FOR INSERT
-WITH CHECK (auth.uid() IS NOT NULL);
-
--- ============================================================================
--- RLS POLICIES: ORG_MEMBERS
--- ============================================================================
-
--- Members can read other members in their organization
-CREATE POLICY "org_members_read_members"
-ON org_members FOR SELECT
-USING (is_org_member(organization_id));
-
--- Owners and admins can add members
-CREATE POLICY "org_admins_create_members"
-ON org_members FOR INSERT
-WITH CHECK (
-  org_role(organization_id) IN ('owner', 'admin')
-);
-
--- Owners and admins can update members
-CREATE POLICY "org_admins_update_members"
-ON org_members FOR UPDATE
-USING (
-  org_role(organization_id) IN ('owner', 'admin')
-);
-
--- Owners and admins can remove members
-CREATE POLICY "org_admins_delete_members"
-ON org_members FOR DELETE
-USING (
-  org_role(organization_id) IN ('owner', 'admin')
-);
-
--- ============================================================================
--- RLS POLICIES: USER_SETTINGS
--- ============================================================================
-
--- Users can read their own settings
-CREATE POLICY "users_read_own_settings"
-ON user_settings FOR SELECT
-USING (user_id = auth.uid());
-
--- Users can insert their own settings
-CREATE POLICY "users_insert_own_settings"
-ON user_settings FOR INSERT
-WITH CHECK (user_id = auth.uid());
-
--- Users can update their own settings
-CREATE POLICY "users_update_own_settings"
-ON user_settings FOR UPDATE
-USING (user_id = auth.uid());
-
--- ============================================================================
--- RLS POLICIES: TESTS
--- ============================================================================
-
--- Organization members can read tests
-CREATE POLICY "org_members_read_tests"
-ON tests FOR SELECT
-USING (is_org_member(organization_id));
-
--- Owners, admins, and recruiters can create tests
-CREATE POLICY "org_writers_create_tests"
-ON tests FOR INSERT
-WITH CHECK (has_write_permission(organization_id));
-
--- Owners, admins, and recruiters can update tests
-CREATE POLICY "org_writers_update_tests"
-ON tests FOR UPDATE
-USING (has_write_permission(organization_id));
-
--- Owners, admins, and recruiters can delete tests
-CREATE POLICY "org_writers_delete_tests"
-ON tests FOR DELETE
-USING (has_write_permission(organization_id));
-
--- ============================================================================
--- RLS POLICIES: TEST_LINKS
--- ============================================================================
-
--- Organization members can read test links for their tests
-CREATE POLICY "org_members_read_test_links"
-ON test_links FOR SELECT
-USING (
-  EXISTS (
-    SELECT 1 FROM tests
-    WHERE tests.id = test_links.test_id
-    AND is_org_member(tests.organization_id)
-  )
-);
-
--- Owners, admins, and recruiters can create test links
-CREATE POLICY "org_writers_create_test_links"
-ON test_links FOR INSERT
-WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM tests
-    WHERE tests.id = test_links.test_id
-    AND has_write_permission(tests.organization_id)
-  )
-);
-
--- Owners, admins, and recruiters can update test links
-CREATE POLICY "org_writers_update_test_links"
-ON test_links FOR UPDATE
-USING (
-  EXISTS (
-    SELECT 1 FROM tests
-    WHERE tests.id = test_links.test_id
-    AND has_write_permission(tests.organization_id)
-  )
-);
-
--- Owners, admins, and recruiters can delete test links
-CREATE POLICY "org_writers_delete_test_links"
-ON test_links FOR DELETE
-USING (
-  EXISTS (
-    SELECT 1 FROM tests
-    WHERE tests.id = test_links.test_id
-    AND has_write_permission(tests.organization_id)
-  )
-);
-
--- ============================================================================
--- RLS POLICIES: CANDIDATES
--- ============================================================================
-
--- Organization members can read candidates
-CREATE POLICY "org_members_read_candidates"
-ON candidates FOR SELECT
-USING (is_org_member(organization_id));
-
--- Owners, admins, and recruiters can create candidates
-CREATE POLICY "org_writers_create_candidates"
-ON candidates FOR INSERT
-WITH CHECK (has_write_permission(organization_id));
-
--- Owners, admins, and recruiters can update candidates
-CREATE POLICY "org_writers_update_candidates"
-ON candidates FOR UPDATE
-USING (has_write_permission(organization_id));
-
--- Owners, admins, and recruiters can delete candidates
-CREATE POLICY "org_writers_delete_candidates"
-ON candidates FOR DELETE
-USING (has_write_permission(organization_id));
-
--- ============================================================================
--- RLS POLICIES: ATTEMPTS
--- ============================================================================
-
--- Organization members can read attempts for their tests
-CREATE POLICY "org_members_read_attempts"
-ON attempts FOR SELECT
-USING (
-  EXISTS (
-    SELECT 1 FROM test_links
-    JOIN tests ON tests.id = test_links.test_id
-    WHERE test_links.id = attempts.test_link_id
-    AND is_org_member(tests.organization_id)
-  )
-);
-
--- Public: Anyone with a valid test link token can create an attempt
-CREATE POLICY "public_create_attempts"
-ON attempts FOR INSERT
-WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM test_links
-    WHERE test_links.id = attempts.test_link_id
-    AND (test_links.expires_at IS NULL OR test_links.expires_at > now())
-  )
-);
-
--- Public: Candidates can update their own attempts
-CREATE POLICY "public_update_attempts"
-ON attempts FOR UPDATE
-USING (
-  submitted_at IS NULL -- Can only update before submission
-);
-
--- ============================================================================
--- RLS POLICIES: REPORTS
--- ============================================================================
-
--- Organization members can read reports
-CREATE POLICY "org_members_read_reports"
-ON reports FOR SELECT
-USING (is_org_member(organization_id));
-
--- Owners, admins, and recruiters can create reports
-CREATE POLICY "org_writers_create_reports"
-ON reports FOR INSERT
-WITH CHECK (has_write_permission(organization_id));
-
--- Owners, admins, and recruiters can update reports
-CREATE POLICY "org_writers_update_reports"
-ON reports FOR UPDATE
-USING (has_write_permission(organization_id));
-
--- Owners, admins, and recruiters can delete reports
-CREATE POLICY "org_writers_delete_reports"
-ON reports FOR DELETE
-USING (has_write_permission(organization_id));
-
--- ============================================================================
--- RLS POLICIES: AUDIT_LOGS
--- ============================================================================
-
--- Organization members can read audit logs
-CREATE POLICY "org_members_read_audit_logs"
-ON audit_logs FOR SELECT
-USING (is_org_member(organization_id));
-
--- System can create audit logs (via service role)
--- No INSERT policy needed as this will be done via admin client
-
--- ============================================================================
--- TRIGGERS FOR UPDATED_AT
--- ============================================================================
-
+-- Function: Update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -446,24 +285,52 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER update_organizations_updated_at
-BEFORE UPDATE ON organizations
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
+-- Trigger: Update items.updated_at
+DROP TRIGGER IF EXISTS update_items_updated_at ON items;
+CREATE TRIGGER update_items_updated_at
+  BEFORE UPDATE ON items
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_tests_updated_at
-BEFORE UPDATE ON tests
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
+-- Trigger: Update workspaces.updated_at
+DROP TRIGGER IF EXISTS update_workspaces_updated_at ON workspaces;
+CREATE TRIGGER update_workspaces_updated_at
+  BEFORE UPDATE ON workspaces
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_user_settings_updated_at
-BEFORE UPDATE ON user_settings
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
+-- Function: Set completed_at when status changes to 'done'
+CREATE OR REPLACE FUNCTION set_completed_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.status_key = 'done' AND OLD.status_key != 'done' THEN
+    NEW.completed_at = now();
+  ELSIF NEW.status_key != 'done' AND OLD.status_key = 'done' THEN
+    NEW.completed_at = NULL;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
--- ============================================================================
--- SEED DATA (Optional - for development)
--- ============================================================================
+-- Trigger: Set completed_at on status change
+DROP TRIGGER IF EXISTS set_item_completed_at ON items;
+CREATE TRIGGER set_item_completed_at
+  BEFORE UPDATE ON items
+  FOR EACH ROW
+  EXECUTE FUNCTION set_completed_at();
 
--- Uncomment below to create a test organization
--- INSERT INTO organizations (name) VALUES ('Test Organization');
+-- =====================================================
+-- 8. Grant Permissions
+-- =====================================================
+
+-- Grant usage on schema
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT USAGE ON SCHEMA public TO anon;
+
+-- Grant permissions on tables
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
+
+-- =====================================================
+-- End of Schema
+-- =====================================================

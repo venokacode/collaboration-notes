@@ -1,60 +1,53 @@
-# HR SaaS
+# Collaboration Notes System
 
-A modern, modular HR management system built with Next.js, Supabase, and AI.
+An internal collaboration notes system built with Next.js, Supabase, and TypeScript.
 
-## 🚀 Features
+## Features
 
-### Core Platform
-- ✅ **Multi-tenant Architecture**: Organization-based data isolation with RLS
-- ✅ **Authentication**: Secure user authentication with Supabase Auth
-- ✅ **Role-based Access Control**: Owner, Admin, Recruiter, Viewer roles
-- ✅ **Internationalization**: Multi-language support with next-intl
-- ✅ **Modular Design**: Easy to add new modules without refactoring
+### Core Functionality
+- ✅ **Unified Item System**: Notes, Todos, and Cards in one place
+- ✅ **Two-Dimensional Organization**: Type (function) and Status (progress) are orthogonal
+- ✅ **Status Flow**: Todo → In Progress → Done
+- ✅ **Automatic Archiving**: Completed items move to Completed Library
+- ✅ **Tags System**: Cross-functional classification with multi-tag support
+- ✅ **Workspace Isolation**: Multi-tenant ready with RLS
 
-### Writing Module
-- ✅ **Test Management**: Create, edit, and manage writing assessments
-- ✅ **Candidate Invitations**: Email-based test invitations with unique links
-- ✅ **Test Submission**: Candidate-facing test interface
-- ✅ **AI Auto-scoring**: Automated scoring using OpenAI GPT-4.1-mini
-- ✅ **Manual Scoring**: 5-dimension scoring system
-- ✅ **Link Management**: Track and manage all test links
-- ✅ **Email Notifications**: Automated invitation and result emails
+### UI Layout
+- **Main Page**: Split view with Todo List (left) and Notes/Cards Area (right)
+- **Completed Page**: View and restore archived items
+- **Synchronized Panels**: Left and right panels stay in sync
+- **English-Only UI**: All interface text in English
 
-### User & Organization Management
-- ✅ **Organization Settings**: Manage organization details
-- ✅ **Team Members**: Invite, manage, and assign roles
-- ✅ **User Profile**: Personal settings and preferences
-- ✅ **Organization Switching**: Support for multiple organizations
+### Security
+- ✅ Row Level Security (RLS) on all tables
+- ✅ Workspace-based data isolation
+- ✅ Auto-join new users to default "Internal" workspace
+- ✅ Secure authentication with Supabase Auth
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Framework**: Next.js 16 (App Router)
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS 4
 - **Database**: Supabase (PostgreSQL)
 - **Authentication**: Supabase Auth
-- **AI**: OpenAI GPT-4.1-mini
-- **Email**: Resend
-- **Deployment**: Vercel
 - **Package Manager**: pnpm
 
-## 📦 Installation
+## Installation
 
 ### Prerequisites
 
 - Node.js 22+
 - pnpm 10+
 - Supabase account
-- OpenAI API key
-- Resend API key (optional, for emails)
 
 ### Setup
 
 1. **Clone the repository**
 
 ```bash
-git clone https://github.com/venokacode/hr-saas.git
-cd hr-saas
+git clone <repository-url>
+cd collaboration-notes
 ```
 
 2. **Install dependencies**
@@ -73,12 +66,6 @@ NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...
 
-# OpenAI
-OPENAI_API_KEY=sk-proj-...
-
-# Resend (optional)
-RESEND_API_KEY=re_...
-
 # App URL
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
@@ -87,7 +74,12 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 - Go to Supabase Dashboard > SQL Editor
 - Copy and execute `supabase/schema.sql`
-- Verify all 9 tables are created
+- Verify all 5 tables are created:
+  - workspaces
+  - workspace_members
+  - items
+  - tags
+  - item_tags
 
 5. **Run development server**
 
@@ -97,104 +89,104 @@ pnpm dev
 
 Open http://localhost:3000
 
-## 🚀 Deployment
+## Database Schema
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed deployment instructions.
+### Tables
 
-### Quick Deploy to Vercel
+1. **workspaces** - Workspace definitions (default: "Internal")
+2. **workspace_members** - User-workspace relationships
+3. **items** - Unified items (notes, todos, cards)
+4. **tags** - Workspace tags
+5. **item_tags** - Many-to-many item-tag relations
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/venokacode/hr-saas)
+### Key Features
 
-1. Click the button above
-2. Configure environment variables
-3. Deploy!
+- **Auto-join**: New users automatically join default workspace
+- **Auto-timestamp**: `completed_at` set when status changes to "done"
+- **Cascading deletes**: Cleanup on item/tag deletion
+- **RLS policies**: Enforce workspace isolation
 
-## 📚 Documentation
+## API Routes
 
-- [Implementation Guide](./IMPLEMENTATION.md) - Technical implementation details
-- [Deployment Guide](./DEPLOYMENT.md) - Production deployment guide
-- [Security Fixes](./SECURITY_FIXES.md) - Security enhancements
-- [Auth Implementation](./AUTH_IMPLEMENTATION.md) - Authentication system
-- [Writing Module](./WRITING_MODULE_DELIVERY.md) - Writing module features
-- [High Priority Features](./HIGH_PRIORITY_FEATURES_DELIVERY.md) - Advanced features
-- [User & Org Management](./USER_ORG_MANAGEMENT_DELIVERY.md) - Management features
-- [AI Scoring & Links](./AI_SCORING_LINKS_DELIVERY.md) - AI and link management
+### Items
+- `GET /api/items?status=active|done` - List items
+- `POST /api/items` - Create item
+- `GET /api/items/[id]` - Get item
+- `PATCH /api/items/[id]` - Update item
+- `DELETE /api/items/[id]` - Delete item
 
-## 🏗️ Project Structure
+### Tags
+- `GET /api/tags` - List tags
+- `POST /api/tags` - Create tag
+- `PATCH /api/tags/[id]` - Update tag
+- `DELETE /api/tags/[id]` - Delete tag
+
+## Project Structure
 
 ```
-hr-saas/
+collaboration-notes/
 ├── src/
-│   ├── app/                    # Next.js App Router
-│   │   ├── (public)/          # Public routes (login, test submission)
-│   │   ├── (app)/             # Authenticated routes
+│   ├── app/
+│   │   ├── (app)/
 │   │   │   └── app/
-│   │   │       ├── modules/   # Module routes
-│   │   │       └── settings/  # Settings routes
-│   │   └── api/               # API routes
-│   ├── components/            # Reusable components
-│   │   ├── ui/               # UI components
-│   │   ├── layout/           # Layout components
-│   │   └── modules/          # Module-specific components
-│   ├── features/             # Business logic
-│   │   ├── auth/            # Authentication
-│   │   ├── organization/    # Organization management
-│   │   ├── modules/         # Module registry
-│   │   └── writing/         # Writing module
-│   ├── lib/                  # Utilities
-│   │   ├── supabase/        # Supabase clients
-│   │   ├── ai-scoring.ts    # AI scoring service
-│   │   ├── email.ts         # Email service
-│   │   └── ...
-│   └── messages/             # i18n translations
-├── supabase/                 # Database schema
-└── public/                   # Static assets
+│   │   │       ├── page.tsx          # Main page (active items)
+│   │   │       ├── completed/        # Completed items page
+│   │   │       └── layout.tsx        # App layout
+│   │   ├── (public)/
+│   │   │   └── login/                # Login page
+│   │   └── api/
+│   │       ├── items/                # Items API
+│   │       └── tags/                 # Tags API
+│   ├── components/
+│   │   └── items/
+│   │       ├── ItemsList.tsx         # Left panel list
+│   │       ├── ItemsGrid.tsx         # Right panel grid
+│   │       ├── ItemEditor.tsx        # Item editor form
+│   │       └── NewItemButton.tsx     # Create button
+│   ├── lib/
+│   │   └── supabase/                 # Supabase clients
+│   └── features/
+│       └── auth/                     # Authentication
+├── supabase/
+│   └── schema.sql                    # Database schema
+└── public/                           # Static assets
 ```
 
-## 🔐 Security
+## Usage
 
-- ✅ Row Level Security (RLS) on all tables
-- ✅ Organization-based data isolation
-- ✅ Role-based access control
-- ✅ UUID validation and rate limiting
-- ✅ Environment variable validation
-- ✅ Type-safe implementation
+### Creating Items
 
-## 🧪 Testing
+1. Click "New Item" button in the left panel
+2. Fill in title, content, type, and status
+3. Add tags (create new or select existing)
+4. Click "Save"
 
-```bash
-# Type check
-pnpm exec tsc --noEmit
+### Managing Items
 
-# Lint
-pnpm lint
+- **View**: Click item in left panel or grid to edit
+- **Update Status**: Change status dropdown (Todo → In Progress → Done)
+- **Complete**: Set status to "Done" - item moves to Completed page
+- **Restore**: Go to Completed page and click "Restore"
+- **Delete**: Open item editor and click "Delete"
 
-# Build
-pnpm build
-```
+### Using Tags
 
-## 📝 License
+- **Add Tag**: Type name in "New tag name" field and press Enter
+- **Apply Tag**: Click tag buttons in item editor
+- **Remove Tag**: Click selected tag to deselect
 
-MIT License - see [LICENSE](./LICENSE) file for details
+## Design Principles
 
-## 🤝 Contributing
+1. **Orthogonal Dimensions**: Type (color) and Status are independent
+2. **No Feature Creep**: Strictly follows requirements, no extra features
+3. **English Only**: All UI text in English
+4. **Multi-tenant Ready**: Data model supports future expansion
+5. **Completion ≠ Deletion**: Completed items are archived, not deleted
 
-Contributions are welcome! Please read our contributing guidelines first.
+## License
 
-## 📞 Support
-
-- Documentation: See docs above
-- Issues: [GitHub Issues](https://github.com/venokacode/hr-saas/issues)
-
-## 🎉 Acknowledgments
-
-Built with:
-- [Next.js](https://nextjs.org/)
-- [Supabase](https://supabase.com/)
-- [OpenAI](https://openai.com/)
-- [Resend](https://resend.com/)
-- [Tailwind CSS](https://tailwindcss.com/)
+MIT License
 
 ---
 
-**Made with ❤️ by the HR SaaS Team**
+**Built for internal collaboration**

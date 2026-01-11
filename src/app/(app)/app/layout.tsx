@@ -1,24 +1,16 @@
-import { OrgSwitcher } from '@/components/layout/OrgSwitcher'
-import { LocaleSwitcher } from '@/components/layout/LocaleSwitcher'
-import { getUserOrganizations, getActiveOrgId } from '@/lib/organization'
-import { getLocale } from '@/lib/i18n/getLocale'
-import { createClient } from '@/lib/supabase/server'
-import { signOut } from '@/features/auth/actions'
-import Link from 'next/link'
+import { createClient } from '@/lib/supabase/server';
+import { signOut } from '@/features/auth/actions';
+import Link from 'next/link';
 
 export default async function AppShellLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
-  const supabase = await createClient()
+  const supabase = await createClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser()
-
-  const organizations = await getUserOrganizations()
-  const activeOrgId = await getActiveOrgId()
-  const currentLocale = await getLocale()
+  } = await supabase.auth.getUser();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -27,27 +19,29 @@ export default async function AppShellLayout({
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <Link href="/app" className="text-xl font-bold text-gray-900">
-              HR SaaS
+              Collaboration Notes
             </Link>
 
-            <div className="flex items-center gap-4">
-              {activeOrgId && (
-                <OrgSwitcher
-                  organizations={organizations}
-                  currentOrgId={activeOrgId}
-                />
-              )}
-              <LocaleSwitcher currentLocale={currentLocale} />
+            <div className="flex items-center gap-6">
+              <nav className="flex items-center gap-4">
+                <Link
+                  href="/app"
+                  className="text-sm text-gray-700 hover:text-gray-900"
+                >
+                  Active Items
+                </Link>
+                <Link
+                  href="/app/completed"
+                  className="text-sm text-gray-700 hover:text-gray-900"
+                >
+                  Completed
+                </Link>
+              </nav>
+
               <div className="flex items-center gap-3 border-l border-gray-200 pl-4">
                 <span className="text-sm text-gray-700">
                   {user?.user_metadata?.name || user?.email}
                 </span>
-                <Link
-                  href="/app/settings/profile"
-                  className="text-sm text-gray-600 hover:text-gray-900"
-                >
-                  Settings
-                </Link>
                 <form action={signOut}>
                   <button
                     type="submit"
@@ -65,5 +59,5 @@ export default async function AppShellLayout({
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">{children}</main>
     </div>
-  )
+  );
 }
