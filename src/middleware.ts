@@ -64,8 +64,14 @@ export async function middleware(request: NextRequest) {
 
     if (!activeWorkspaceId) {
       // No workspace cookie found - this should be set during login
-      // Get user's first workspace as fallback
-      const { data: membership } = await supabase
+      // Get user's first workspace as fallback using service role to bypass RLS
+      const { createClient } = await import('@supabase/supabase-js')
+      const supabaseAdmin = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { auth: { persistSession: false } }
+      )
+      const { data: membership } = await supabaseAdmin
         .from('workspace_members')
         .select('workspace_id')
         .eq('user_id', user.id)
