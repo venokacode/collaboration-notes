@@ -154,7 +154,7 @@ function LoginForm() {
               <button
                 type="button"
                 onClick={async () => {
-                  const { createClient } = await import('@/lib/supabase/client')
+                  const { createClient } = await import('@/lib/supabase/browser')
                   const supabase = createClient()
                   await supabase.auth.signInWithOAuth({
                     provider: 'google',
