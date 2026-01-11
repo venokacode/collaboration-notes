@@ -63,19 +63,22 @@ export async function middleware(request: NextRequest) {
     const activeWorkspaceId = request.cookies.get('active_workspace_id')?.value
 
     if (!activeWorkspaceId) {
-      // Get default workspace through workspace_members to respect RLS
-      const { data: membership } = await supabase
+      // Get user's workspace memberships
+      const { data: memberships } = await supabase
         .from('workspace_members')
-        .select('workspace_id, workspaces!inner(id, is_default)')
+        .select('workspace_id, workspaces(id, is_default)')
         .eq('user_id', user.id)
-        .eq('workspaces.is_default', true)
-        .single()
 
-      if (membership?.workspace_id) {
+      // Find the default workspace
+      const defaultMembership = memberships?.find(
+        (m: any) => m.workspaces?.is_default === true
+      )
+
+      if (defaultMembership?.workspace_id) {
         response = NextResponse.next({
           request,
         })
-        response.cookies.set('active_workspace_id', membership.workspace_id, {
+        response.cookies.set('active_workspace_id', defaultMembership.workspace_id, {
           path: '/',
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
